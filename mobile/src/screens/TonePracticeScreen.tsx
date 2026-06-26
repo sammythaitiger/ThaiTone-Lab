@@ -3,6 +3,7 @@ import { SafeAreaView, StyleSheet } from "react-native";
 import { Snackbar } from "react-native-paper";
 
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
+import { usePracticeHistoryPersistence } from "../hooks/usePracticeHistoryPersistence";
 import { usePracticeScreen } from "../hooks/usePracticeScreen";
 import { appColors } from "../theme/colors";
 import { UIShowcaseScreen } from "./UIShowcaseScreen";
@@ -19,9 +20,11 @@ export function TonePracticeScreen() {
     practiceStage,
     microphonePermission,
     recordingSeconds,
+    lastRecordingUri,
     selectedTones,
     syllableFilter,
     searchQuery,
+    practiceHistory,
     isLoadingWords,
     isAnalyzing,
     errorMessage,
@@ -32,6 +35,8 @@ export function TonePracticeScreen() {
     goToSelection,
     toggleToneFilter,
     clearToneFilters,
+    clearPracticeHistory,
+    hydratePracticeHistory,
     setSyllableFilter,
     setSearchQuery,
     startRecording,
@@ -61,6 +66,11 @@ export function TonePracticeScreen() {
     Boolean(errorMessage);
   const shouldShowSnackbar =
     Boolean(errorMessage) && !hasInlineSelectionError && !hasInlinePracticeError;
+
+  usePracticeHistoryPersistence({
+    history: practiceHistory,
+    onHydrate: hydratePracticeHistory,
+  });
 
   React.useEffect(() => {
     setMicrophonePermission(recorder.microphonePermission);
@@ -140,7 +150,7 @@ export function TonePracticeScreen() {
     try {
       setIsStoppingRecording(true);
       const recording = await recorder.stopRecording();
-      await stopRecording(recording?.durationMs);
+      await stopRecording(recording ?? undefined);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to stop recording."
@@ -204,6 +214,7 @@ export function TonePracticeScreen() {
           selectedTones={selectedTones}
           syllableFilter={syllableFilter}
           searchQuery={searchQuery}
+          practiceHistory={practiceHistory}
           isLoading={isLoadingWords}
           errorMessage={errorMessage}
           onToggleTone={toggleToneFilter}
@@ -215,6 +226,7 @@ export function TonePracticeScreen() {
             setSyllableFilter(null);
             setSearchQuery("");
           }}
+          onClearPracticeHistory={clearPracticeHistory}
           onRetry={() => void initialize()}
           onOpenShowcase={__DEV__ ? () => setIsShowcaseOpen(true) : undefined}
         />
@@ -226,6 +238,7 @@ export function TonePracticeScreen() {
           practiceStage={practiceStage}
           microphonePermission={microphonePermission}
           recordingSeconds={recordingSeconds}
+          recordingUri={lastRecordingUri}
           recordingCountdown={recordingCountdown}
           isStoppingRecording={isStoppingRecording}
           errorMessage={errorMessage}

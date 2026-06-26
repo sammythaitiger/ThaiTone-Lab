@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { Button, Card, ProgressBar, Surface, Text } from "react-native-paper";
 
 import { useMockPlayback } from "../../hooks/useMockPlayback";
+import { useRecordingPlayback } from "../../hooks/useRecordingPlayback";
 import { AnalyzeResponse } from "../../types/practice";
 import { appColors } from "../../theme/colors";
 import { elevation, radii, spacing, typography } from "../../theme/tokens";
@@ -13,6 +14,7 @@ import { ToneChip } from "./ToneChip";
 
 type PracticeResultsPanelProps = {
   analysis: AnalyzeResponse;
+  recordingUri?: string;
   onTryAgain: () => void;
   onBackToWords: () => void;
 };
@@ -93,18 +95,17 @@ function getGraphCue(
 
 export function PracticeResultsPanel({
   analysis,
+  recordingUri = "",
   onTryAgain,
   onBackToWords,
 }: PracticeResultsPanelProps) {
   const playback = useMockPlayback({
     durationMs: Math.max(analysis.syllables.length * 900, 2000),
   });
+  const userPlayback = useRecordingPlayback(recordingUri);
   const weakestSyllable = analysis.syllables.reduce((lowest, current) => {
     return current.accuracy < lowest.accuracy ? current : lowest;
   }, analysis.syllables[0]);
-  const strongCount = analysis.syllables.filter(
-    (syllable) => getAccuracyTier(syllable.accuracy) === "strong"
-  ).length;
   const weakCount = analysis.syllables.filter(
     (syllable) => getAccuracyTier(syllable.accuracy) === "weak"
   ).length;
@@ -113,6 +114,9 @@ export function PracticeResultsPanel({
   const coachingGraphCue = weakestSyllable
     ? getGraphCue(weakestSyllable.expected_tone, weakestSyllable.detected_tone)
     : coachingSignal.graphCopy;
+  const confidencePercent = Math.round((analysis.confidence ?? 0.45) * 100);
+  const analysisModeLabel =
+    analysis.analysis_mode === "pitch" ? "Pitch analysis" : "Guided estimate";
 
   return (
     <View style={styles.container}>
@@ -173,6 +177,14 @@ export function PracticeResultsPanel({
           <View style={styles.summaryStatsRow}>
             <View style={styles.summaryStatCard}>
               <Text variant="labelSmall" style={styles.summaryStatLabel}>
+                Mode
+              </Text>
+              <Text variant="titleMedium" style={styles.summaryStatValue}>
+                {analysisModeLabel}
+              </Text>
+            </View>
+            <View style={styles.summaryStatCard}>
+              <Text variant="labelSmall" style={styles.summaryStatLabel}>
                 Timing
               </Text>
               <Text variant="headlineSmall" style={styles.summaryStatValue}>
@@ -181,10 +193,10 @@ export function PracticeResultsPanel({
             </View>
             <View style={styles.summaryStatCard}>
               <Text variant="labelSmall" style={styles.summaryStatLabel}>
-                Strong syllables
+                Confidence
               </Text>
               <Text variant="headlineSmall" style={styles.summaryStatValue}>
-                {strongCount}
+                {confidencePercent}%
               </Text>
             </View>
             <View style={styles.summaryStatCard}>
@@ -254,13 +266,21 @@ export function PracticeResultsPanel({
               </View>
               <Button
                 mode="contained"
-                icon={playback.getStatus("user-attempt") === "playing" ? "pause-circle" : "play-circle"}
-                onPress={() => playback.toggle("user-attempt")}
-                loading={playback.getStatus("user-attempt") === "loading"}
-                disabled={playback.getStatus("native-model") === "loading"}
+                icon={userPlayback.status === "playing" ? "pause-circle" : "play-circle"}
+                onPress={userPlayback.toggle}
+                loading={userPlayback.status === "loading"}
+                disabled={
+                  !recordingUri ||
+                  playback.getStatus("native-model") === "loading" ||
+                  userPlayback.status === "loading"
+                }
                 contentStyle={styles.audioButtonContent}
               >
-                {playback.getStatus("user-attempt") === "playing" ? "Pause" : "Play yours"}
+                {!recordingUri
+                  ? "No recording"
+                  : userPlayback.status === "playing"
+                    ? "Pause"
+                    : "Play yours"}
               </Button>
             </View>
           </View>
@@ -270,6 +290,12 @@ export function PracticeResultsPanel({
               Step 1: hear the native model. Step 2: listen to your own take.
               Step 3: compare both with the graph below.
             </Text>
+            {recordingUri ? (
+              <ProgressBar
+                progress={userPlayback.progress}
+                style={styles.userPlaybackProgress}
+              />
+            ) : null}
           </View>
         </Card.Content>
       </Card>
@@ -718,10 +744,16 @@ const styles = StyleSheet.create({
     borderRadius: radii.small,
     backgroundColor: appColors.infoSurface,
     padding: spacing.large,
+    gap: spacing.small,
   },
   compareHintText: {
     color: appColors.infoText,
     lineHeight: typography.lineHeightBody,
+  },
+  userPlaybackProgress: {
+    height: 8,
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(30, 103, 115, 0.18)",
   },
   actions: {
     flexDirection: "row",

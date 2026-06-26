@@ -1,12 +1,20 @@
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_settings
 from app.data import PRACTICE_WORDS, get_word_by_id, list_word_summaries
 from app.schemas import AnalyzeRequest, AnalyzeResponse, HealthResponse, PracticeWord
 from app.services.pronunciation import analyze_pronunciation
 
+settings = get_settings()
+
+
+def _audio_suffix(filename: Optional[str]) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    return suffix if suffix else ".m4a"
 
 app = FastAPI(
     title="Thai Tones API",
@@ -16,8 +24,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.cors_origin_regex,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -54,3 +63,34 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         raise HTTPException(status_code=404, detail="Word not found")
 
     return analyze_pronunciation(word=word, recording_duration_ms=request.recording_duration_ms)
+
+
+@app.post("/api/analyze-audio", response_model=AnalyzeResponse)
+async def analyze_audio(
+    word_id: str = Form(...),
+    recording_duration_ms: int = Form(1800),
+    audio: UploadFile = File(...),
+) -> AnalyzeResponse:
+    word = get_word_by_id(word_id)
+    if word is None:
+        raise HTTPException(status_code=404, detail="Word not found")
+
+    if (
+        audio.content_type
+        and audio.content_type not in settings.allowed_audio_content_types
+    ):
+        raise HTTPException(status_code=415, detail="Unsupported audio content type")
+
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Audio file is empty")
+
+    if len(audio_bytes) > settings.max_audio_upload_bytes:
+        raise HTTPException(status_code=413, detail="Audio file is too large")
+
+    return analyze_pronunciation(
+        word=word,
+        recording_duration_ms=recording_duration_ms,
+        audio_bytes=audio_bytes,
+        audio_suffix=_audio_suffix(audio.filename),
+    )

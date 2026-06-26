@@ -109,6 +109,7 @@ def test_syllable_tokenization():
 
 def test_audio_processing():
     """Test basic audio processing capabilities."""
+    test_file = "test_audio.wav"
     try:
         import librosa
         import soundfile as sf
@@ -116,7 +117,6 @@ def test_audio_processing():
         
         # Create test audio
         test_audio = np.zeros(16000)  # 1 second of silence at 16kHz
-        test_file = "test_audio.wav"
         
         # Write and read back
         sf.write(test_file, test_audio, 16000)
@@ -127,15 +127,11 @@ def test_audio_processing():
         
         print(f"✅ Audio processing: {len(audio)} samples at {sr}Hz")
         
-        # Cleanup
-        if os.path.exists(test_file):
-            os.remove(test_file)
-        
-        return True
-        
     except ImportError:
         pytest.skip("Audio libraries not installed")
-        return False
+    finally:
+        if os.path.exists(test_file):
+            os.remove(test_file)
 
 def test_mfa_alignment_with_silence():
     """Test MFA alignment with silent audio (basic test)."""

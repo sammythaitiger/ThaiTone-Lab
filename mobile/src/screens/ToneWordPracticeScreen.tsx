@@ -23,6 +23,7 @@ type ToneWordPracticeScreenProps = {
   practiceStage: PracticeStage;
   microphonePermission: MicrophonePermissionState;
   recordingSeconds: number;
+  recordingUri: string;
   recordingCountdown: number | null;
   isStoppingRecording: boolean;
   errorMessage: string;
@@ -45,6 +46,7 @@ export function ToneWordPracticeScreen({
   practiceStage,
   microphonePermission,
   recordingSeconds,
+  recordingUri,
   recordingCountdown,
   isStoppingRecording,
   errorMessage,
@@ -222,6 +224,7 @@ export function ToneWordPracticeScreen({
           <AnimatedEntrance delay={90} variant="hero">
           <PracticeResultsPanel
             analysis={analysis}
+            recordingUri={recordingUri}
             onTryAgain={onReset}
             onBackToWords={onBack}
           />

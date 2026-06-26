@@ -1,4 +1,5 @@
 export type ThaiTone = "mid" | "low" | "falling" | "high" | "rising";
+export type AnalysisMode = "pitch" | "fallback";
 
 export interface PracticeSyllable {
   thai: string;
@@ -22,6 +23,18 @@ export interface PracticeWordSummary {
   syllable_count: number;
 }
 
+export interface PracticeAttempt {
+  id: string;
+  wordId: string;
+  thai: string;
+  transcription: string;
+  overallAccuracy: number;
+  timingScore: number;
+  confidence: number;
+  analysisMode: AnalysisMode;
+  createdAt: string;
+}
+
 export interface SyllableResult {
   syllable: string;
   expectedTone: ThaiTone;
@@ -35,6 +48,9 @@ export interface AnalyzeResponse {
   overall_accuracy: number;
   timing_score: number;
   next_step: string;
+  analysis_mode?: AnalysisMode;
+  confidence?: number;
+  diagnostics?: string[];
   syllables: Array<{
     syllable: string;
     expected_tone: ThaiTone;

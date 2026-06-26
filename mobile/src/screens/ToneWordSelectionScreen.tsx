@@ -12,10 +12,11 @@ import {
 import { BottomTabBar } from "../components/practice/BottomTabBar";
 import { AnimatedEntrance } from "../components/practice/AnimatedEntrance";
 import { PracticeStateCard } from "../components/practice/PracticeStateCard";
+import { RecentAttemptsPanel } from "../components/practice/RecentAttemptsPanel";
 import { WordSelectionCard } from "../components/practice/WordSelectionCard";
 import { SyllableFilter } from "../store/practiceStore";
 import { appColors, toneColors } from "../theme/colors";
-import { PracticeWord, ThaiTone } from "../types/practice";
+import { PracticeAttempt, PracticeWord, ThaiTone } from "../types/practice";
 import { getMotionDelay } from "../utils/motion";
 import { useMotionTransition } from "../hooks/useMotionTransition";
 
@@ -25,6 +26,7 @@ type ToneWordSelectionScreenProps = {
   selectedTones: ThaiTone[];
   syllableFilter: SyllableFilter;
   searchQuery: string;
+  practiceHistory: PracticeAttempt[];
   isLoading: boolean;
   errorMessage: string;
   onToggleTone: (tone: ThaiTone) => void;
@@ -32,6 +34,7 @@ type ToneWordSelectionScreenProps = {
   onSearchChange: (value: string) => void;
   onOpenPractice: (wordId: string) => void;
   onClearFilters: () => void;
+  onClearPracticeHistory: () => void;
   onRetry: () => void;
   onOpenShowcase?: () => void;
 };
@@ -52,6 +55,7 @@ export function ToneWordSelectionScreen({
   selectedTones,
   syllableFilter,
   searchQuery,
+  practiceHistory,
   isLoading,
   errorMessage,
   onToggleTone,
@@ -59,6 +63,7 @@ export function ToneWordSelectionScreen({
   onSearchChange,
   onOpenPractice,
   onClearFilters,
+  onClearPracticeHistory,
   onRetry,
   onOpenShowcase,
 }: ToneWordSelectionScreenProps) {
@@ -153,6 +158,17 @@ export function ToneWordSelectionScreen({
                       Narrow the word list
                     </Text>
                   </View>
+                  <View style={styles.heroStatCard}>
+                    <Text variant="labelSmall" style={styles.heroStatLabel}>
+                      Attempts
+                    </Text>
+                    <Text variant="headlineSmall" style={styles.heroStatValue}>
+                      {practiceHistory.length}
+                    </Text>
+                    <Text variant="bodySmall" style={styles.heroStatHint}>
+                      Saved on this device
+                    </Text>
+                  </View>
                 </View>
 
                 {featuredWord ? (
@@ -196,6 +212,12 @@ export function ToneWordSelectionScreen({
                   </AnimatedEntrance>
                 ) : null}
               </View>
+
+              <RecentAttemptsPanel
+                attempts={practiceHistory}
+                onOpenPractice={onOpenPractice}
+                onClear={onClearPracticeHistory}
+              />
 
               <View style={styles.filtersCard}>
                 <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -283,6 +305,7 @@ export function ToneWordSelectionScreen({
                   </View>
                 ) : null}
               </View>
+
             </View>
           </AnimatedEntrance>
         ) : null}

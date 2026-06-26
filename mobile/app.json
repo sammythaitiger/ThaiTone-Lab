@@ -5,15 +5,32 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "scheme": "thaitones",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7FAFC"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "ios": {
+      "bundleIdentifier": "com.thaitones.app",
+      "supportsTablet": false,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Thai Tones uses the microphone so you can record and analyze pronunciation practice."
       }
     },
     "android": {
+      "package": "com.thaitones.app",
       "permissions": [
         "RECORD_AUDIO"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F7FAFC"
+      }
     },
     "assetBundlePatterns": [
       "**/*"
@@ -22,7 +39,8 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ]
   }
 }

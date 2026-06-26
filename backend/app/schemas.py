@@ -12,6 +12,11 @@ class ThaiTone(str, Enum):
     RISING = "rising"
 
 
+class AnalysisMode(str, Enum):
+    PITCH = "pitch"
+    FALLBACK = "fallback"
+
+
 class WordSyllable(BaseModel):
     thai: str
     transcription: str
@@ -58,6 +63,17 @@ class AnalyzeResponse(BaseModel):
     timing_score: int = Field(ge=0, le=100)
     syllables: List[SyllableFeedback]
     next_step: str
+    analysis_mode: AnalysisMode = Field(
+        default=AnalysisMode.FALLBACK,
+        description="Whether the result used pitch extraction or deterministic fallback scoring.",
+    )
+    confidence: float = Field(
+        default=0.45,
+        ge=0,
+        le=1,
+        description="Overall confidence in the analysis result.",
+    )
+    diagnostics: List[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

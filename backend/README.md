@@ -6,14 +6,23 @@ It currently serves:
 
 - `GET /health`
 - `GET /api/practice-words`
+- `GET /api/practice-words/{word_id}`
+- `GET /api/practice-words-full`
 - `POST /api/analyze`
+- `POST /api/analyze-audio`
 
-The analysis response is mocked for now, but the response shape is ready for a future MFA-based implementation.
+Audio analysis uses pitch extraction when possible and falls back to guided scoring
+when pitch data is unavailable.
 
 ## Run locally
 ```bash
 pip install -r requirements.txt
-uvicorn app.main:app --reload --app-dir backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
+```
+
+## Smoke test
+```bash
+./scripts/api-smoke.sh http://127.0.0.1:8000
 ```
 
 ## Example request
@@ -24,9 +33,10 @@ curl -X POST http://127.0.0.1:8000/api/analyze \
 ```
 
 ## Next implementation step
-Replace `backend/app/services/pronunciation.py` mock logic with:
+Harden `backend/app/services/pronunciation.py` with:
 
 1. uploaded audio preprocessing
 2. MFA alignment
 3. pitch contour extraction
 4. syllable-by-syllable scoring
+5. validated scoring against Thai speaker samples

@@ -1,21 +1,34 @@
 import { create } from "zustand";
 
 import {
+  SAMPLE_WORDS,
+  getSampleWordById,
+  getSampleWordSummaries,
+} from "../data/sampleWords";
+import {
   AnalyzeResponse,
+  PracticeAttempt,
   PracticeWord,
   PracticeWordSummary,
   ThaiTone,
 } from "../types/practice";
 import {
+  RecordingUpload,
   analyzeWord,
+  analyzeRecording,
   fetchPracticeWord,
   fetchPracticeWords,
 } from "../utils/api";
+import { createLocalFallbackAnalysis } from "../utils/localAnalysis";
 
 export type PracticeRoute = "selection" | "practice";
 export type SyllableFilter = "1" | "2" | "3" | "4+" | null;
 export type PracticeStage = "before_recording" | "recording" | "analyzing" | "results";
 export type MicrophonePermissionState = "required" | "granted";
+
+function getNetworkErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Backend is unavailable.";
+}
 
 type PracticeStore = {
   wordOptions: PracticeWordSummary[];
@@ -28,9 +41,11 @@ type PracticeStore = {
   microphonePermission: MicrophonePermissionState;
   recordingSeconds: number;
   lastRecordingDurationMs: number;
+  lastRecordingUri: string;
   selectedTones: ThaiTone[];
   syllableFilter: SyllableFilter;
   searchQuery: string;
+  practiceHistory: PracticeAttempt[];
   isLoadingWords: boolean;
   isLoadingWordDetail: boolean;
   isAnalyzing: boolean;
@@ -43,16 +58,35 @@ type PracticeStore = {
   goToSelection: () => void;
   toggleToneFilter: (tone: ThaiTone) => void;
   clearToneFilters: () => void;
+  clearPracticeHistory: () => void;
+  hydratePracticeHistory: (history: PracticeAttempt[]) => void;
   setSyllableFilter: (filter: SyllableFilter) => void;
   setSearchQuery: (query: string) => void;
   runAnalysis: () => Promise<void>;
   startRecording: () => void;
   tickRecording: () => void;
-  stopRecording: (recordingDurationMs?: number) => Promise<void>;
+  stopRecording: (recording?: RecordingUpload) => Promise<void>;
   cancelRecording: () => void;
   resetPractice: () => void;
   clearError: () => void;
 };
+
+function buildPracticeAttempt(
+  word: PracticeWord,
+  analysis: AnalyzeResponse
+): PracticeAttempt {
+  return {
+    id: `${word.id}-${Date.now()}`,
+    wordId: word.id,
+    thai: word.thai,
+    transcription: word.transcription,
+    overallAccuracy: analysis.overall_accuracy,
+    timingScore: analysis.timing_score,
+    confidence: analysis.confidence ?? 0.45,
+    analysisMode: analysis.analysis_mode ?? "fallback",
+    createdAt: new Date().toISOString(),
+  };
+}
 
 export const usePracticeStore = create<PracticeStore>((set, get) => ({
   wordOptions: [],
@@ -65,9 +99,11 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
   microphonePermission: "required",
   recordingSeconds: 0,
   lastRecordingDurationMs: 0,
+  lastRecordingUri: "",
   selectedTones: [],
   syllableFilter: null,
   searchQuery: "",
+  practiceHistory: [],
   isLoadingWords: false,
   isLoadingWordDetail: false,
   isAnalyzing: false,
@@ -95,11 +131,18 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
         recordingSeconds: 0,
       });
     } catch (error) {
+      const fallbackWords = [...SAMPLE_WORDS];
+      const firstWord = fallbackWords[0] ?? null;
+
       set({
-        errorMessage:
-          error instanceof Error
-            ? error.message
-            : "Failed to load practice words.",
+        wordOptions: getSampleWordSummaries(),
+        practiceWords: fallbackWords,
+        selectedWordId: firstWord?.id ?? "",
+        selectedWord: firstWord,
+        analysis: null,
+        practiceStage: "before_recording",
+        recordingSeconds: 0,
+        errorMessage: `Using built-in practice library. ${getNetworkErrorMessage(error)}`,
       });
     } finally {
       set({ isLoadingWords: false });
@@ -115,7 +158,9 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
   },
 
   selectWord: async (wordId: string) => {
-    const cachedWord = get().practiceWords.find((word) => word.id === wordId);
+    const cachedWord =
+      get().practiceWords.find((word) => word.id === wordId) ??
+      getSampleWordById(wordId);
 
     if (cachedWord) {
       set({
@@ -125,6 +170,7 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
         practiceStage: "before_recording",
         recordingSeconds: 0,
         lastRecordingDurationMs: 0,
+        lastRecordingUri: "",
         errorMessage: "",
       });
       return;
@@ -146,8 +192,25 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
         practiceStage: "before_recording",
         recordingSeconds: 0,
         lastRecordingDurationMs: 0,
+        lastRecordingUri: "",
       });
     } catch (error) {
+      const fallbackWord = getSampleWordById(wordId);
+
+      if (fallbackWord) {
+        set({
+          practiceWords: [...get().practiceWords, fallbackWord],
+          selectedWord: fallbackWord,
+          analysis: null,
+          practiceStage: "before_recording",
+          recordingSeconds: 0,
+          lastRecordingDurationMs: 0,
+          lastRecordingUri: "",
+          errorMessage: `Using built-in word data. ${getNetworkErrorMessage(error)}`,
+        });
+        return;
+      }
+
       set({
         errorMessage:
           error instanceof Error
@@ -166,6 +229,7 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
       practiceStage: "before_recording",
       recordingSeconds: 0,
       lastRecordingDurationMs: 0,
+      lastRecordingUri: "",
     });
   },
 
@@ -177,6 +241,7 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
       practiceStage: "before_recording",
       recordingSeconds: 0,
       lastRecordingDurationMs: 0,
+      lastRecordingUri: "",
     });
   },
 
@@ -190,6 +255,14 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
 
   clearToneFilters: () => {
     set({ selectedTones: [] });
+  },
+
+  clearPracticeHistory: () => {
+    set({ practiceHistory: [] });
+  },
+
+  hydratePracticeHistory: (history) => {
+    set({ practiceHistory: history.slice(0, 25) });
   },
 
   setSyllableFilter: (filter) => {
@@ -219,22 +292,34 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
         get().lastRecordingDurationMs || selectedWord.syllables.length * 700
       );
 
-      set({ analysis: response, practiceStage: "results" });
+      set((state) => ({
+        analysis: response,
+        practiceStage: "results",
+        practiceHistory: [
+          buildPracticeAttempt(selectedWord, response),
+          ...state.practiceHistory,
+        ].slice(0, 25),
+      }));
     } catch (error) {
-      set({
-        practiceStage: "before_recording",
-        errorMessage:
-          error instanceof Error
-            ? error.message
-            : "Failed to analyze recording.",
-      });
+      const fallbackDurationMs =
+        get().lastRecordingDurationMs || selectedWord.syllables.length * 700;
+      const fallbackResponse = createLocalFallbackAnalysis(
+        selectedWord,
+        fallbackDurationMs
+      );
+
+      set((state) => ({
+        analysis: fallbackResponse,
+        practiceStage: "results",
+        practiceHistory: [
+          buildPracticeAttempt(selectedWord, fallbackResponse),
+          ...state.practiceHistory,
+        ].slice(0, 25),
+        errorMessage: `Using guided estimate. ${getNetworkErrorMessage(error)}`,
+      }));
     } finally {
       set({ isAnalyzing: false });
     }
-  },
-
-  grantMicrophonePermission: () => {
-    set({ microphonePermission: "granted", errorMessage: "" });
   },
 
   startRecording: () => {
@@ -249,6 +334,7 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
       practiceStage: "recording",
       recordingSeconds: 0,
       lastRecordingDurationMs: 0,
+      lastRecordingUri: "",
       analysis: null,
       errorMessage: "",
     });
@@ -260,11 +346,60 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
     }));
   },
 
-  stopRecording: async (recordingDurationMs?: number) => {
-    if (recordingDurationMs) {
-      set({ lastRecordingDurationMs: recordingDurationMs });
+  stopRecording: async (recording?: RecordingUpload) => {
+    const { selectedWord } = get();
+
+    if (!selectedWord) {
+      return;
     }
-    await get().runAnalysis();
+
+    set({
+      lastRecordingDurationMs: recording?.durationMs ?? get().lastRecordingDurationMs,
+      lastRecordingUri: recording?.uri ?? "",
+    });
+
+    try {
+      set({
+        isAnalyzing: true,
+        practiceStage: "analyzing",
+        errorMessage: "",
+      });
+
+      const fallbackDurationMs =
+        recording?.durationMs || selectedWord.syllables.length * 700;
+      const response = recording?.uri
+        ? await analyzeRecording(selectedWord.id, {
+            uri: recording.uri,
+            durationMs: fallbackDurationMs,
+          })
+        : await analyzeWord(selectedWord.id, fallbackDurationMs);
+
+      set((state) => ({
+        analysis: response,
+        practiceStage: "results",
+        practiceHistory: [
+          buildPracticeAttempt(selectedWord, response),
+          ...state.practiceHistory,
+        ].slice(0, 25),
+      }));
+    } catch (error) {
+      const fallbackResponse = createLocalFallbackAnalysis(
+        selectedWord,
+        recording?.durationMs || selectedWord.syllables.length * 700
+      );
+
+      set((state) => ({
+        analysis: fallbackResponse,
+        practiceStage: "results",
+        practiceHistory: [
+          buildPracticeAttempt(selectedWord, fallbackResponse),
+          ...state.practiceHistory,
+        ].slice(0, 25),
+        errorMessage: `Using guided estimate. ${getNetworkErrorMessage(error)}`,
+      }));
+    } finally {
+      set({ isAnalyzing: false });
+    }
   },
 
   cancelRecording: () => {
@@ -272,6 +407,7 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
       practiceStage: "before_recording",
       recordingSeconds: 0,
       lastRecordingDurationMs: 0,
+      lastRecordingUri: "",
       errorMessage: "",
     });
   },
@@ -283,6 +419,7 @@ export const usePracticeStore = create<PracticeStore>((set, get) => ({
       practiceStage: "before_recording",
       recordingSeconds: 0,
       lastRecordingDurationMs: 0,
+      lastRecordingUri: "",
       errorMessage: "",
     });
   },
